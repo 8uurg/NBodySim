@@ -14,6 +14,7 @@ jobs:
       - name: run pytest
         uses: pavelzw/pytest-action@v2
         with:
+          custom-pytest: uv run pytest
           verbose: true
           emoji: false
           job-summary: true

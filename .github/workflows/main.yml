@@ -14,10 +14,10 @@ jobs:
       - name: run pytest
         uses: pavelzw/pytest-action@v2
         with:
-          custom-pytest: uv run pytest
+          custom-pytest: uv run pytest 
           verbose: true
           emoji: false
           job-summary: true
-          custom-arguments: '-q'
+          # custom-arguments: '-q'
           click-to-expand: true
           report-title: 'Test Report'

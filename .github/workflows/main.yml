@@ -1,0 +1,22 @@
+name: GitHub Actions Demo
+run-name: ${{ github.actor }} is testing out GitHub Actions 🚀
+on: [push]
+jobs:
+  Check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: checkout
+        uses: actions/checkout@v4
+      - name: setup uv
+        uses: astral-sh/setup-uv@v6.1.0
+      - name: lint with Ruff
+        uses: astral-sh/ruff-action@v3.4.0
+      - name: run pytest
+        uses: pavelzw/pytest-action@v2
+        with:
+          verbose: true
+          emoji: false
+          job-summary: true
+          custom-arguments: '-q'
+          click-to-expand: true
+          report-title: 'Test Report'

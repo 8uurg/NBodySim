@@ -221,7 +221,8 @@ def make_n_body_ode_eff(masses: np.ndarray, G=G, jacobian=False):
         # m_acceleration /= np.where(m_acceleration_norm <= 0.0, np.inf, m_acceleration_norm)
         m_acceleration_norm = np.where(m_acceleration_norm <= 0.0, np.inf, m_acceleration_norm)
         # f(x) / g(x) dx = (f'(x)g(x) - f(x)g'(x)) / (g(x)**2)
-        m_acceleration_dy = np.nan_to_num(m_acceleration_dy * m_acceleration_norm[:, :, :, :, np.newaxis] - m_acceleration[:, :, :, :, np.newaxis] * m_acceleration_norm_dy, nan=0.0) / np.square(m_acceleration_norm[:, :, :, :, np.newaxis])
+        with np.errstate(invalid='ignore'):
+            m_acceleration_dy = np.nan_to_num(m_acceleration_dy * m_acceleration_norm[:, :, :, :, np.newaxis] - m_acceleration[:, :, :, :, np.newaxis] * m_acceleration_norm_dy, nan=0.0) / np.square(m_acceleration_norm[:, :, :, :, np.newaxis])
         m_acceleration /= m_acceleration_norm
         # Multiplication by a constant :)
         m_acceleration *= Gm2p

@@ -105,7 +105,7 @@ def make_n_body_ode_eff(masses: np.ndarray, G=G, jacobian=False):
     # Gm1m2 = (G * (masses * masses.T))[:, :, np.newaxis]
     # But when calculating acceleration, we divide by masses again
     Gm2 = (G * (masses.T))[np.newaxis, :, :, np.newaxis]
-    Gm2p = (G * (masses.T))[:, :, np.newaxis]
+    Gm2p = (G * (masses.T))[np.newaxis, :, :, np.newaxis]
 
 
     def n_body_ode_eff(_times: float, state: np.ndarray):
@@ -150,14 +150,22 @@ def make_n_body_ode_eff(masses: np.ndarray, G=G, jacobian=False):
         nonlocal masses, n_bodies, Gm2p
         # The Jacobian matrix has shape (n, n) and its element (i, j) is equal to `d f_i / d y_j`
         # Not sure if the library will ever call this in a vectorized format
-        
-        assert len(state.shape) == 1, "jac does not expect a vectorized call right now"
-        n_state_elem = state.shape[0]
 
-        # We are calculating the jacobian
-        # Notes for future vectorization: states are independent:
-        # np.zeros((n_states, n_state_elem, n_state_elem)) should suffice!
-        jac = np.zeros((n_state_elem, n_state_elem))
+        is_vectorized = True
+
+        if len(state.shape) == 1:
+            is_vectorized = False
+            state = state.reshape(1, -1)
+        else:
+            # transpose state - we work with major state first.
+            state = state.T
+        
+        n_states = state.shape[0]
+        n_state_elem = state.shape[1]
+
+        # We are calculating the jacobian.
+        # Note that different states are independent and do not interact.
+        jac = np.zeros((n_states, n_state_elem, n_state_elem))
 
         # There are 4 blocks in the jacobian.
         # A B
@@ -171,25 +179,27 @@ def make_n_body_ode_eff(masses: np.ndarray, G=G, jacobian=False):
 
         # Split the state in two parts - positions and velocities
         half_state_elem = n_state_elem//2
-        positions = state[:half_state_elem].reshape(n_bodies, -1)
-        # velocities = state[half_state_elem:].reshape(n_bodies, -1)
+        positions = state[:, :half_state_elem].reshape(n_states, n_bodies, -1)
+        # velocities = state[:, half_state_elem:].reshape(n_states, n_bodies, -1)
 
         # For the first i positions, the jacobian is simple.
         pos_ids = list(range(half_state_elem))
         vel_ids = list(range(half_state_elem, n_state_elem))
         # velocities is the derivative of the first half (positions) - as this is literally a copy
         # of the state - set B.
-        jac[pos_ids, vel_ids] = 1
+        jac[:, pos_ids, vel_ids] = 1
 
         # for the remaining elements, the velocities are not used in the jacobian (another bit of sparsity)
         # only these positions are used - so we are going to be a bit lazy, and ignore the remaining half :)
         # Shape here is (s, b, d, bd')
-        positions_dy = np.eye((half_state_elem)).reshape((n_bodies, positions.shape[-1],  half_state_elem))
+        # Note that this is identical for ALL states - hence the one at the beginning!
+        positions_dy = np.eye((half_state_elem)).reshape((1, n_bodies, positions.shape[-1],  half_state_elem))
 
         # The force (including direction) are as follows
-        m_acceleration = positions[np.newaxis, :, :] - positions[:, np.newaxis, :]
-        # jacobian, shape here is (s, b_a, b_b, d, s', bd')
-        m_acceleration_dy = positions_dy[np.newaxis, :, :, :] - positions_dy[:, np.newaxis, :, :]
+        m_acceleration = positions[:, np.newaxis, :, :] - positions[:, :, np.newaxis, :]
+        # jacobian, shape here is (s, b_a, b_b, d, bd')
+        # note that here, state is likely still size 1, as things do not deviate here...
+        m_acceleration_dy = positions_dy[:, np.newaxis, :, :, :] - positions_dy[:, :, np.newaxis, :, :]
 
         # m_acceleration_norm = (np.linalg.norm(m_acceleration, axis=-1, keepdims=True) ** 3) - split up.
         m_acceleration_sq = np.square(m_acceleration)
@@ -198,7 +208,7 @@ def make_n_body_ode_eff(masses: np.ndarray, G=G, jacobian=False):
         # f(a) = (a) ** 2, f'(a) = 2a
         # hence
         # = g(x) * g'(x)
-        m_acceleration_sq_dy = 2 * m_acceleration_dy * m_acceleration[:, :, :, np.newaxis]
+        m_acceleration_sq_dy = 2 * m_acceleration_dy * m_acceleration[:, :, :, :, np.newaxis]
 
         # sum - simple
         m_acceleration_sqs = np.sum(m_acceleration_sq, axis=-1, keepdims=True)
@@ -207,25 +217,29 @@ def make_n_body_ode_eff(masses: np.ndarray, G=G, jacobian=False):
         # sqrt(x)**3 dx = x^1.5 dx = 1.5 x^0.5 = 1.5 sqrt(x)
         # 2/3 sqrt(m_acceleration_sqs) * m_acceleration_sqs_dy
         m_acceleration_norm = m_acceleration_sqs ** 1.5
-        m_acceleration_norm_dy = 1.5 * np.sqrt(m_acceleration_sqs)[:, :, :, np.newaxis] * m_acceleration_sqs_dy
+        m_acceleration_norm_dy = 1.5 * np.sqrt(m_acceleration_sqs)[:, :, :, :, np.newaxis] * m_acceleration_sqs_dy
         # m_acceleration /= np.where(m_acceleration_norm <= 0.0, np.inf, m_acceleration_norm)
         m_acceleration_norm = np.where(m_acceleration_norm <= 0.0, np.inf, m_acceleration_norm)
         # f(x) / g(x) dx = (f'(x)g(x) - f(x)g'(x)) / (g(x)**2)
-        m_acceleration_dy = np.nan_to_num(m_acceleration_dy * m_acceleration_norm[:, :, :, np.newaxis] - m_acceleration[:, :, :, np.newaxis] * m_acceleration_norm_dy, nan=0.0) / np.square(m_acceleration_norm[:, :, :, np.newaxis])
+        m_acceleration_dy = np.nan_to_num(m_acceleration_dy * m_acceleration_norm[:, :, :, :, np.newaxis] - m_acceleration[:, :, :, :, np.newaxis] * m_acceleration_norm_dy, nan=0.0) / np.square(m_acceleration_norm[:, :, :, :, np.newaxis])
         m_acceleration /= m_acceleration_norm
         # Multiplication by a constant :)
         m_acceleration *= Gm2p
-        m_acceleration_dy *= Gm2p[:, :, :, np.newaxis]
+        m_acceleration_dy *= Gm2p[:, :, :, :, np.newaxis]
         
         # the net force vector is hence
-        # net_acceleration = np.sum(m_acceleration, axis=1)
-        net_acceleration_dy = np.sum(m_acceleration_dy, axis=1)
+        # net_acceleration = np.sum(m_acceleration, axis=2)
+        net_acceleration_dy = np.sum(m_acceleration_dy, axis=2) # axis=1 without state
 
         # d_state = np.concatenate([velocities.reshape(n_states, -1),
         #                           net_acceleration.reshape(n_states, -1)], axis=1)
         # velocities.reshape(n_states, -1) - already done
-        jac[half_state_elem:, :half_state_elem] = net_acceleration_dy.reshape(half_state_elem, half_state_elem)
-        return jac
+        jac[:, half_state_elem:, :half_state_elem] = net_acceleration_dy.reshape(n_states, half_state_elem, half_state_elem)
+        
+        if not is_vectorized:
+            return jac.reshape(n_state_elem, n_state_elem)
+        
+        return np.moveaxis(jac, 0, -1)
 
     if jacobian:
         return n_body_ode_eff, n_body_ode_eff_jac

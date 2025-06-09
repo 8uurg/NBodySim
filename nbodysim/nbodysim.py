@@ -111,9 +111,11 @@ def make_n_body_ode_eff(masses: np.ndarray, G=G, jacobian=False):
     def n_body_ode_eff(_times: float, state: np.ndarray):
         # Precomputed (cached) values
         nonlocal masses, n_bodies, Gm2
+        is_vectorized = True
         # For vectorization, we need to be able to accept both a time vector, and state can be a [state]
         if len(state.shape) == 1:
             state = state.reshape(1, -1)
+            is_vectorized = False
         else:
             state = state.T
         n_states = state.shape[0]
@@ -137,6 +139,10 @@ def make_n_body_ode_eff(masses: np.ndarray, G=G, jacobian=False):
 
         d_state = np.concatenate([velocities.reshape(n_states, -1),
                                   net_acceleration.reshape(n_states, -1)], axis=1)
+        
+        if not is_vectorized:
+            return d_state.ravel()
+
         return d_state.T
 
     def n_body_ode_eff_jac(_times: float, state: np.ndarray):

@@ -94,3 +94,44 @@ def test_small_difference():
     # plt.show()
 
     assert np.allclose(states_dt_dr, state_jac)
+
+def get_simple_system():
+    masses = np.array([1e26, 1e26, 1e26])
+
+    # Start in a simple lunar eclipse configuration, keeps things simple.
+    initial_positions = np.array([
+        [ 0.0e8,  1.0e8],
+        [ 0.0e8, -1.0e8],
+        [ 1.0e8,  0.0e8],
+    ])
+    # For ease, going with the average velocity as the starting velocity.
+    # perpendicular to the offset direction
+    initial_velocities = np.array([
+        [ 1.0e3, -1.0e3],
+        [-1.0e3,  1.0e3],
+        [-1.0e3,  1.0e3]
+    ])
+
+    initial_state = np.concatenate([initial_positions.ravel(), initial_velocities.ravel()])
+
+    return masses, initial_state
+
+def test_simple_sim():
+    from scipy.integrate import solve_ivp
+
+    rtol = 1e-5 # defaults to 1e-3
+    atol = 1e-10 # defaults to 1e-6
+    masses, initial_state = get_simple_system()
+    t_span = [0.0, float(60.0 * 60.0 * 24.0)] # a day
+    ode = make_n_body_ode_eff(masses)
+    res = solve_ivp(ode, t_span, y0=initial_state, dense_output=True, vectorized=True, method="DOP853", rtol=rtol, atol=atol)
+
+def test_simple_sim_with_jacobian():
+    from scipy.integrate import solve_ivp
+    
+    rtol = 1e-5 # defaults to 1e-3
+    atol = 1e-10 # defaults to 1e-6
+    masses, initial_state = get_simple_system()
+    t_span = [0.0, float(60.0 * 60.0 * 24.0)] # a day
+    ode, ode_jac = make_n_body_ode_eff(masses, jacobian=True)
+    res = solve_ivp(ode, t_span, y0=initial_state, jac=ode_jac, dense_output=True, vectorized=True,  method="BDF", rtol=rtol, atol=atol)

@@ -124,7 +124,7 @@ def test_simple_sim():
     masses, initial_state = get_simple_system()
     t_span = [0.0, float(60.0 * 60.0 * 24.0)] # a day
     ode = make_n_body_ode_eff(masses)
-    res = solve_ivp(ode, t_span, y0=initial_state, dense_output=True, vectorized=True, method="DOP853", rtol=rtol, atol=atol)
+    _res = solve_ivp(ode, t_span, y0=initial_state, dense_output=True, vectorized=True, method="DOP853", rtol=rtol, atol=atol)
 
 def test_simple_sim_with_jacobian():
     from scipy.integrate import solve_ivp
@@ -134,4 +134,4 @@ def test_simple_sim_with_jacobian():
     masses, initial_state = get_simple_system()
     t_span = [0.0, float(60.0 * 60.0 * 24.0)] # a day
     ode, ode_jac = make_n_body_ode_eff(masses, jacobian=True)
-    res = solve_ivp(ode, t_span, y0=initial_state, jac=ode_jac, dense_output=True, vectorized=True,  method="BDF", rtol=rtol, atol=atol)
+    _res = solve_ivp(ode, t_span, y0=initial_state, jac=ode_jac, dense_output=True, vectorized=True,  method="BDF", rtol=rtol, atol=atol)
